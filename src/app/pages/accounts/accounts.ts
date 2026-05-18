@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -10,6 +10,17 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AccountsService, FbAccount } from '../../core/services/accounts.service';
+import { LoginSessionService } from '../../core/services/login-session.service';
+
+const PUPPETEER_W = 1280;
+const PUPPETEER_H = 900;
+
+const KEY_MAP: Record<string, string> = {
+  Enter: 'Enter', Backspace: 'Backspace', Tab: 'Tab', Escape: 'Escape',
+  Delete: 'Delete', Home: 'Home', End: 'End',
+  ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight',
+  ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown',
+};
 
 @Component({
   selector: 'app-accounts',
@@ -71,7 +82,7 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
                     {{ account.isRunning ? 'Running' : account.status }}
                   </span>
                   @if (!account.hasCookies) {
-                    <span class="warn-hint"><mat-icon class="warn-icon">warning</mat-icon> No cookies</span>
+                    <span class="warn-hint"><mat-icon class="warn-icon">warning</mat-icon> Not logged in</span>
                   }
                   @if (account.isRunning) {
                     <button mat-stroked-button color="warn" (click)="stopBot(account)" [disabled]="busy[account.id]">
@@ -80,12 +91,14 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
                   } @else {
                     <button mat-flat-button color="primary" (click)="startBot(account)"
                       [disabled]="busy[account.id] || !account.hasCookies"
-                      [matTooltip]="!account.hasCookies ? 'Paste cookies first' : ''">
+                      [matTooltip]="!account.hasCookies ? 'Log in to Facebook first' : ''">
                       <mat-icon>play_arrow</mat-icon> Start
                     </button>
                   }
-                  <button mat-stroked-button (click)="toggleCookies(account.id)">
-                    <mat-icon>cookie</mat-icon> {{ account.hasCookies ? 'Update Cookies' : 'Add Cookies' }}
+                  <button mat-flat-button color="accent" (click)="openLogin(account)"
+                    [disabled]="loginSessionId === account.id || sessionStarting">
+                    <mat-icon>login</mat-icon>
+                    {{ account.hasCookies ? 'Re-login' : 'Login with Facebook' }}
                   </button>
                   <button mat-icon-button color="warn" (click)="remove(account)" [disabled]="busy[account.id]">
                     <mat-icon>delete</mat-icon>
@@ -93,26 +106,31 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
                 </div>
               </div>
 
-              @if (expandedId === account.id) {
-                <div class="cookies-section">
-                  <p class="cookies-help">
-                    Export cookies from Facebook using <strong>EditThisCookie</strong> Chrome extension.
-                    Click the Export button (checkmark icon) on facebook.com — it copies the JSON to clipboard.
-                  </p>
-                  <mat-form-field appearance="outline" class="cookies-field">
-                    <mat-label>Paste cookie JSON array here</mat-label>
-                    <textarea matInput rows="5" [formControl]="getCookieCtrl(account.id)"
-                      placeholder='[{"name":"c_user","value":"...","domain":".facebook.com",...}]'></textarea>
-                  </mat-form-field>
-                  <div class="cookies-actions">
-                    <button mat-flat-button color="primary" (click)="saveCookies(account)"
-                      [disabled]="savingCookies[account.id] || !getCookieCtrl(account.id).value?.trim()">
-                      @if (savingCookies[account.id]) { <mat-spinner diameter="16" /> } @else { <mat-icon>save</mat-icon> }
-                      Save Cookies
+              @if (loginSessionId === account.id) {
+                <div class="session-section">
+                  <div class="session-header">
+                    <span class="session-title">
+                      <mat-icon>open_in_browser</mat-icon>
+                      Log in to Facebook — click the browser below, then type
+                    </span>
+                    <button mat-icon-button (click)="closeLogin(account.id)">
+                      <mat-icon>close</mat-icon>
                     </button>
-                    <button mat-button (click)="expandedId = ''">Cancel</button>
-                    @if (cookieError[account.id]) { <span class="err">{{ cookieError[account.id] }}</span> }
                   </div>
+                  @if (sessionLoggedIn) {
+                    <div class="session-success">
+                      <mat-icon>check_circle</mat-icon> Logged in! Cookies saved. You can now start the bot.
+                    </div>
+                  } @else if (!sessionSrc) {
+                    <div class="session-loading"><mat-spinner diameter="40" /><p>Loading browser...</p></div>
+                  } @else {
+                    <div class="session-browser" tabindex="0" #sessionEl
+                         (keydown)="onKey($event, sessionEl)">
+                      <img [src]="sessionSrc" class="session-img"
+                           (click)="onImgClick($event, sessionEl)" />
+                    </div>
+                    <p class="session-hint">Click on the browser image to interact, then type normally</p>
+                  }
                 </div>
               }
             </mat-card>
@@ -122,7 +140,7 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
     </div>
   `,
   styles: [`
-    .page { padding: 32px; max-width: 860px; }
+    .page { padding: 32px; max-width: 900px; }
     .page-header { margin-bottom: 24px; }
     h1 { margin: 0 0 4px; font-size: 26px; }
     p { margin: 0; color: #666; }
@@ -150,37 +168,52 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
     .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
     .warn-hint { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #f57c00; }
     .warn-icon { font-size: 16px; width: 16px; height: 16px; }
-    .cookies-section { border-top: 1px solid #e0e0e0; padding: 20px; background: #fafafa; }
-    .cookies-help { font-size: 13px; color: #666; margin: 0 0 16px; }
-    .cookies-field { width: 100%; }
-    .cookies-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
-    .cookies-actions .err { margin: 0; }
+
+    /* Login session */
+    .session-section { border-top: 1px solid #e0e0e0; background: #111; }
+    .session-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #1a1a2e; }
+    .session-title { display: flex; align-items: center; gap: 8px; color: #90caf9; font-size: 13px; font-weight: 500; }
+    .session-title mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .session-header button { color: #aaa; }
+    .session-success { display: flex; align-items: center; gap: 8px; padding: 20px; color: #81c784; font-weight: 600; font-size: 15px; background: #1b2a1b; }
+    .session-success mat-icon { color: #81c784; }
+    .session-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px; color: #aaa; }
+    .session-browser { outline: none; cursor: crosshair; display: block; line-height: 0; }
+    .session-browser:focus { box-shadow: inset 0 0 0 2px #4f8ef7; }
+    .session-img { width: 100%; display: block; }
+    .session-hint { margin: 0; padding: 8px 16px; font-size: 12px; color: #888; background: #1a1a1a; text-align: center; }
   `]
 })
-export class Accounts implements OnInit {
+export class Accounts implements OnInit, OnDestroy {
   accounts: FbAccount[] = [];
   loading = true;
   loadError = '';
   adding = false;
   addError = '';
-  expandedId = '';
   busy: Record<string, boolean> = {};
-  savingCookies: Record<string, boolean> = {};
-  cookieError: Record<string, string> = {};
   labelCtrl = new FormControl('', Validators.required);
-  private cookieCtrls: Record<string, FormControl> = {};
 
-  constructor(private svc: AccountsService, private snack: MatSnackBar) {}
+  // Login session state
+  loginSessionId = '';
+  sessionSrc = '';
+  sessionLoggedIn = false;
+  sessionStarting = false;
+  private screenshotTimer: any;
+  private statusTimer: any;
+
+  constructor(
+    private svc: AccountsService,
+    private loginSvc: LoginSessionService,
+    private snack: MatSnackBar,
+  ) {}
 
   ngOnInit() { this.load(true); }
 
-  getCookieCtrl(id: string): FormControl {
-    if (!this.cookieCtrls[id]) this.cookieCtrls[id] = new FormControl('');
-    return this.cookieCtrls[id];
-  }
-
-  toggleCookies(id: string) {
-    this.expandedId = this.expandedId === id ? '' : id;
+  ngOnDestroy() {
+    this.clearTimers();
+    if (this.loginSessionId) {
+      this.loginSvc.close(this.loginSessionId).subscribe();
+    }
   }
 
   load(showSpinner = false) {
@@ -197,27 +230,6 @@ export class Accounts implements OnInit {
     this.svc.create(this.labelCtrl.value!).subscribe({
       next: () => { this.labelCtrl.reset(); this.adding = false; this.load(); this.snack.open('Account added', 'OK', { duration: 2500 }); },
       error: (e) => { this.addError = e.error?.message || 'Failed to add account'; this.adding = false; },
-    });
-  }
-
-  saveCookies(account: FbAccount) {
-    const raw = this.getCookieCtrl(account.id).value?.trim();
-    if (!raw) return;
-    try { JSON.parse(raw); } catch {
-      this.cookieError[account.id] = 'Invalid JSON — paste the full array from the browser extension';
-      return;
-    }
-    this.savingCookies[account.id] = true;
-    this.cookieError[account.id] = '';
-    this.svc.updateCookies(account.id, raw).subscribe({
-      next: () => {
-        this.savingCookies[account.id] = false;
-        this.expandedId = '';
-        this.getCookieCtrl(account.id).reset();
-        this.load();
-        this.snack.open('Cookies saved — bot is ready to start', 'OK', { duration: 3000 });
-      },
-      error: (e) => { this.savingCookies[account.id] = false; this.cookieError[account.id] = e.error?.message || 'Failed to save'; },
     });
   }
 
@@ -244,5 +256,85 @@ export class Accounts implements OnInit {
       next: () => { this.load(); this.snack.open('Account removed', 'OK', { duration: 2500 }); },
       error: () => (this.busy[account.id] = false),
     });
+  }
+
+  openLogin(account: FbAccount) {
+    this.sessionStarting = true;
+    this.loginSvc.start(account.id).subscribe({
+      next: () => {
+        this.loginSessionId = account.id;
+        this.sessionSrc = '';
+        this.sessionLoggedIn = false;
+        this.sessionStarting = false;
+        this.startPolling(account.id);
+      },
+      error: (e) => {
+        this.sessionStarting = false;
+        this.snack.open(e.error?.message || 'Failed to open browser', 'OK', { duration: 3000 });
+      },
+    });
+  }
+
+  closeLogin(accountId: string) {
+    this.clearTimers();
+    this.loginSvc.close(accountId).subscribe();
+    this.loginSessionId = '';
+    this.sessionSrc = '';
+    this.load();
+  }
+
+  onImgClick(event: MouseEvent, el: HTMLElement) {
+    const img = event.target as HTMLImageElement;
+    const rect = img.getBoundingClientRect();
+    const x = Math.round((event.clientX - rect.left) * (PUPPETEER_W / rect.width));
+    const y = Math.round((event.clientY - rect.top) * (PUPPETEER_H / rect.height));
+    this.loginSvc.click(this.loginSessionId, x, y).subscribe();
+    el.focus();
+  }
+
+  onKey(event: KeyboardEvent, el: HTMLElement) {
+    event.preventDefault();
+    const mapped = KEY_MAP[event.key];
+    if (mapped) {
+      this.loginSvc.press(this.loginSessionId, mapped).subscribe();
+    } else if (event.key.length === 1) {
+      this.loginSvc.type(this.loginSessionId, event.key).subscribe();
+    }
+  }
+
+  private startPolling(accountId: string) {
+    this.screenshotTimer = setInterval(() => this.fetchScreenshot(accountId), 600);
+    this.statusTimer = setInterval(() => this.checkStatus(accountId), 2000);
+    this.fetchScreenshot(accountId);
+  }
+
+  private fetchScreenshot(accountId: string) {
+    this.loginSvc.getScreenshot(accountId).subscribe({
+      next: (src) => { this.sessionSrc = src; },
+      error: () => {},
+    });
+  }
+
+  private checkStatus(accountId: string) {
+    this.loginSvc.getStatus(accountId).subscribe({
+      next: (s) => {
+        if (s.loggedIn) {
+          this.sessionLoggedIn = true;
+          this.clearTimers();
+          setTimeout(() => {
+            this.loginSessionId = '';
+            this.sessionSrc = '';
+            this.load();
+            this.snack.open('Facebook login saved — you can now start the bot', 'OK', { duration: 4000 });
+          }, 2500);
+        }
+      },
+      error: () => {},
+    });
+  }
+
+  private clearTimers() {
+    clearInterval(this.screenshotTimer);
+    clearInterval(this.statusTimer);
   }
 }
