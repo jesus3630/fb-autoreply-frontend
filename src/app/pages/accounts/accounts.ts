@@ -43,6 +43,12 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
 
       @if (loading) {
         <div class="center"><mat-spinner diameter="40" /></div>
+      } @else if (loadError) {
+        <div class="empty error-state">
+          <mat-icon>error_outline</mat-icon>
+          <p>{{ loadError }}</p>
+          <button mat-stroked-button (click)="load()">Retry</button>
+        </div>
       } @else if (accounts.length === 0) {
         <div class="empty">
           <mat-icon>account_circle</mat-icon>
@@ -140,7 +146,9 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
     .error { color: #e53935; font-size: 13px; margin: 8px 0 0; }
     .center { display: flex; justify-content: center; padding: 40px; }
     .empty { text-align: center; padding: 48px; color: #aaa; }
-    .empty mat-icon { font-size: 56px; width: 56px; height: 56px; }
+    .empty mat-icon { font-size: 56px; width: 56px; height: 56px; display: block; margin: 0 auto 12px; }
+    .error-state { color: #e53935; }
+    .error-state mat-icon { color: #e53935; }
     .accounts-list { display: flex; flex-direction: column; gap: 16px; }
     .account-card { padding: 0; overflow: hidden; }
     .account-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
@@ -168,6 +176,7 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
 export class Accounts implements OnInit {
   accounts: FbAccount[] = [];
   loading = true;
+  loadError = '';
   adding = false;
   addError = '';
   busy: Record<string, boolean> = {};
@@ -187,9 +196,10 @@ export class Accounts implements OnInit {
   }
 
   load() {
+    this.loading = true; this.loadError = '';
     this.svc.getBotStatus().subscribe({
       next: (a) => { this.accounts = a; this.loading = false; },
-      error: () => (this.loading = false),
+      error: (e) => { this.loadError = e.error?.message || 'Failed to load accounts. Check your connection.'; this.loading = false; },
     });
   }
 
