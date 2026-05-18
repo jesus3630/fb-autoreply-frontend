@@ -1,8 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/services/auth.service';
@@ -45,6 +44,12 @@ import { AuthService } from '../../../core/services/auth.service';
         </div>
       </mat-sidenav>
       <mat-sidenav-content class="main-content">
+        @if (sessionExpiringSoon) {
+          <div class="session-banner">
+            <mat-icon>warning</mat-icon>
+            Your session expires soon. <button (click)="auth.logout()">Log out and back in</button> to stay connected.
+          </div>
+        }
         <router-outlet />
       </mat-sidenav-content>
     </mat-sidenav-container>
@@ -62,9 +67,25 @@ import { AuthService } from '../../../core/services/auth.service';
     .nav-item mat-icon { color: rgba(255,255,255,0.5); font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
     .nav-item.active mat-icon, .nav-item:hover mat-icon { color: inherit; }
     .sidenav-footer { border-top: 1px solid rgba(255,255,255,0.1); padding: 8px; }
-    .main-content { background: #f5f6fa; overflow-y: auto; }
+    .main-content { background: #f5f6fa; overflow-y: auto; display: flex; flex-direction: column; }
+    .session-banner { background: #fff3cd; color: #856404; padding: 10px 20px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .session-banner mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .session-banner button { margin-left: 4px; background: none; border: none; color: #856404; font-weight: 600; cursor: pointer; text-decoration: underline; padding: 0; }
   `]
 })
-export class Shell {
+export class Shell implements OnInit {
+  sessionExpiringSoon = false;
+
   constructor(public auth: AuthService) {}
+
+  ngOnInit() {
+    const token = this.auth.getToken();
+    if (!token) return;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expiresIn = payload.exp * 1000 - Date.now();
+      // warn if less than 24 hours remain
+      this.sessionExpiringSoon = expiresIn > 0 && expiresIn < 24 * 60 * 60 * 1000;
+    } catch {}
+  }
 }
