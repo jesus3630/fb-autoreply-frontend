@@ -8,6 +8,7 @@ export interface FbAccount {
   status: string;
   isActive: boolean;
   isRunning: boolean;
+  hasCookies: boolean;
   lastError: string | null;
   lastSeenAt: string | null;
   createdAt: string;
@@ -41,5 +42,9 @@ export class AccountsService {
 
   stopBot(accountId: string) {
     return this.http.post(`${this.api}/bots/${accountId}/stop`, {});
+  }
+
+  updateCookies(accountId: string, cookies: string) {
+    return this.http.patch(`${this.api}/accounts/${accountId}/cookies`, { cookies });
   }
 }
