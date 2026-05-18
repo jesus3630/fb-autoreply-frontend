@@ -47,7 +47,7 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
         <div class="empty error-state">
           <mat-icon>error_outline</mat-icon>
           <p>{{ loadError }}</p>
-          <button mat-stroked-button (click)="load()">Retry</button>
+          <button mat-stroked-button (click)="load(true)">Retry</button>
         </div>
       } @else if (accounts.length === 0) {
         <div class="empty">
@@ -188,15 +188,15 @@ export class Accounts implements OnInit {
 
   constructor(private svc: AccountsService, private snack: MatSnackBar) {}
 
-  ngOnInit() { this.load(); }
+  ngOnInit() { this.load(true); }
 
   getCookieCtrl(id: string): FormControl {
     if (!this.cookieCtrls[id]) this.cookieCtrls[id] = new FormControl('');
     return this.cookieCtrls[id];
   }
 
-  load() {
-    this.loading = true; this.loadError = '';
+  load(showSpinner = false) {
+    if (showSpinner) { this.loading = true; this.loadError = ''; }
     this.svc.getBotStatus().subscribe({
       next: (a) => { this.accounts = a; this.loading = false; },
       error: (e) => { this.loadError = e.error?.message || 'Failed to load accounts. Check your connection.'; this.loading = false; },
