@@ -2,4 +2,4 @@
 cmds = ["npm run build"]
 
 [start]
-cmd = "npx serve dist/fb-autoreply-frontend/browser -l $PORT"
+cmd = "npx serve /app/dist/fb-autoreply-frontend/browser -l $PORT --single"
