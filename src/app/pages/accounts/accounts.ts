@@ -7,17 +7,15 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatExpansionModule } from '@angular/material/expansion';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AccountsService, FbAccount } from '../../core/services/accounts.service';
 
 @Component({
   selector: 'app-accounts',
   standalone: true,
   imports: [DatePipe, ReactiveFormsModule, MatCardModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule,
-    MatTooltipModule, MatExpansionModule],
+    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule],
   template: `
     <div class="page">
       <div class="page-header">
@@ -38,15 +36,15 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
             <mat-icon>add</mat-icon> Add
           </button>
         </div>
-        @if (addError) { <p class="error">{{ addError }}</p> }
+        @if (addError) { <p class="err">{{ addError }}</p> }
       </mat-card>
 
       @if (loading) {
         <div class="center"><mat-spinner diameter="40" /></div>
       } @else if (loadError) {
-        <div class="empty error-state">
-          <mat-icon>error_outline</mat-icon>
-          <p>{{ loadError }}</p>
+        <div class="empty">
+          <mat-icon style="color:#e53935">error_outline</mat-icon>
+          <p style="color:#e53935">{{ loadError }}</p>
           <button mat-stroked-button (click)="load(true)">Retry</button>
         </div>
       } @else if (accounts.length === 0) {
@@ -73,9 +71,7 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
                     {{ account.isRunning ? 'Running' : account.status }}
                   </span>
                   @if (!account.hasCookies) {
-                    <span class="no-cookies-hint" matTooltip="Paste Facebook cookies below before starting">
-                      <mat-icon class="warn-icon">warning</mat-icon> No cookies
-                    </span>
+                    <span class="warn-hint"><mat-icon class="warn-icon">warning</mat-icon> No cookies</span>
                   }
                   @if (account.isRunning) {
                     <button mat-stroked-button color="warn" (click)="stopBot(account)" [disabled]="busy[account.id]">
@@ -88,45 +84,37 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
                       <mat-icon>play_arrow</mat-icon> Start
                     </button>
                   }
+                  <button mat-stroked-button (click)="toggleCookies(account.id)">
+                    <mat-icon>cookie</mat-icon> {{ account.hasCookies ? 'Update Cookies' : 'Add Cookies' }}
+                  </button>
                   <button mat-icon-button color="warn" (click)="remove(account)" [disabled]="busy[account.id]">
                     <mat-icon>delete</mat-icon>
                   </button>
                 </div>
               </div>
 
-              <mat-expansion-panel class="cookies-panel" [expanded]="expandedId === account.id"
-                (opened)="expandedId = account.id" (closed)="expandedId === account.id && (expandedId = '')">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>
-                    <mat-icon class="panel-icon">cookie</mat-icon>
-                    {{ account.hasCookies ? 'Update Facebook Cookies' : 'Paste Facebook Cookies' }}
-                  </mat-panel-title>
-                  <mat-panel-description>
-                    {{ account.hasCookies ? 'Cookies saved — bot can log in' : 'Required before starting the bot' }}
-                  </mat-panel-description>
-                </mat-expansion-panel-header>
-
-                <div class="cookies-body">
+              @if (expandedId === account.id) {
+                <div class="cookies-section">
                   <p class="cookies-help">
-                    Export cookies from Facebook using a browser extension like <strong>EditThisCookie</strong>
-                    or <strong>Cookie-Editor</strong>. Copy the JSON array and paste it below.
+                    Export cookies from Facebook using <strong>EditThisCookie</strong> Chrome extension.
+                    Click the Export button (checkmark icon) on facebook.com — it copies the JSON to clipboard.
                   </p>
                   <mat-form-field appearance="outline" class="cookies-field">
-                    <mat-label>Cookie JSON (array from browser extension)</mat-label>
-                    <textarea matInput rows="6" [formControl]="getCookieCtrl(account.id)"
+                    <mat-label>Paste cookie JSON array here</mat-label>
+                    <textarea matInput rows="5" [formControl]="getCookieCtrl(account.id)"
                       placeholder='[{"name":"c_user","value":"...","domain":".facebook.com",...}]'></textarea>
                   </mat-form-field>
                   <div class="cookies-actions">
                     <button mat-flat-button color="primary" (click)="saveCookies(account)"
                       [disabled]="savingCookies[account.id] || !getCookieCtrl(account.id).value?.trim()">
-                      @if (savingCookies[account.id]) { <mat-spinner diameter="16" /> }
-                      @else { <mat-icon>save</mat-icon> }
+                      @if (savingCookies[account.id]) { <mat-spinner diameter="16" /> } @else { <mat-icon>save</mat-icon> }
                       Save Cookies
                     </button>
-                    @if (cookieError[account.id]) { <span class="error">{{ cookieError[account.id] }}</span> }
+                    <button mat-button (click)="expandedId = ''">Cancel</button>
+                    @if (cookieError[account.id]) { <span class="err">{{ cookieError[account.id] }}</span> }
                   </div>
                 </div>
-              </mat-expansion-panel>
+              }
             </mat-card>
           }
         </div>
@@ -143,34 +131,30 @@ import { AccountsService, FbAccount } from '../../core/services/accounts.service
     .add-row { display: flex; gap: 12px; align-items: flex-start; }
     .label-field { flex: 1; }
     .add-row button { margin-top: 4px; height: 44px; }
-    .error { color: #e53935; font-size: 13px; margin: 8px 0 0; }
+    .err { color: #e53935; font-size: 13px; margin: 8px 0 0; }
     .center { display: flex; justify-content: center; padding: 40px; }
     .empty { text-align: center; padding: 48px; color: #aaa; }
     .empty mat-icon { font-size: 56px; width: 56px; height: 56px; display: block; margin: 0 auto 12px; }
-    .error-state { color: #e53935; }
-    .error-state mat-icon { color: #e53935; }
     .accounts-list { display: flex; flex-direction: column; gap: 16px; }
     .account-card { padding: 0; overflow: hidden; }
-    .account-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
+    .account-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; flex-wrap: wrap; gap: 12px; }
     .account-info { display: flex; align-items: center; gap: 14px; }
     .acct-icon { font-size: 40px; width: 40px; height: 40px; color: #4f8ef7; }
     .account-label { font-weight: 600; font-size: 15px; }
     .account-meta { font-size: 12px; color: #999; }
     .account-error { font-size: 12px; color: #e53935; }
-    .account-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .account-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .status-chip { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; background: #f0f0f0; color: #666; }
     .status-chip.running { background: #e8f5e9; color: #2e7d32; }
     .status-chip.error { background: #ffebee; color: #c62828; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-    .no-cookies-hint { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #f57c00; }
+    .warn-hint { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #f57c00; }
     .warn-icon { font-size: 16px; width: 16px; height: 16px; }
-    .cookies-panel { border-top: 1px solid #e0e0e0; border-radius: 0 !important; box-shadow: none !important; }
-    .panel-icon { font-size: 18px; width: 18px; height: 18px; margin-right: 6px; vertical-align: middle; }
-    .cookies-body { padding: 8px 0 16px; }
+    .cookies-section { border-top: 1px solid #e0e0e0; padding: 20px; background: #fafafa; }
     .cookies-help { font-size: 13px; color: #666; margin: 0 0 16px; }
     .cookies-field { width: 100%; }
-    .cookies-actions { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
-    .cookies-actions .error { margin: 0; }
+    .cookies-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+    .cookies-actions .err { margin: 0; }
   `]
 })
 export class Accounts implements OnInit {
@@ -179,10 +163,10 @@ export class Accounts implements OnInit {
   loadError = '';
   adding = false;
   addError = '';
+  expandedId = '';
   busy: Record<string, boolean> = {};
   savingCookies: Record<string, boolean> = {};
   cookieError: Record<string, string> = {};
-  expandedId = '';
   labelCtrl = new FormControl('', Validators.required);
   private cookieCtrls: Record<string, FormControl> = {};
 
@@ -195,11 +179,15 @@ export class Accounts implements OnInit {
     return this.cookieCtrls[id];
   }
 
+  toggleCookies(id: string) {
+    this.expandedId = this.expandedId === id ? '' : id;
+  }
+
   load(showSpinner = false) {
     if (showSpinner) { this.loading = true; this.loadError = ''; }
     this.svc.getBotStatus().subscribe({
       next: (a) => { this.accounts = a; this.loading = false; },
-      error: (e) => { this.loadError = e.error?.message || 'Failed to load accounts. Check your connection.'; this.loading = false; },
+      error: (e) => { this.loadError = e.error?.message || 'Failed to load. Check your connection.'; this.loading = false; },
     });
   }
 
@@ -229,10 +217,7 @@ export class Accounts implements OnInit {
         this.load();
         this.snack.open('Cookies saved — bot is ready to start', 'OK', { duration: 3000 });
       },
-      error: (e) => {
-        this.savingCookies[account.id] = false;
-        this.cookieError[account.id] = e.error?.message || 'Failed to save cookies';
-      },
+      error: (e) => { this.savingCookies[account.id] = false; this.cookieError[account.id] = e.error?.message || 'Failed to save'; },
     });
   }
 
