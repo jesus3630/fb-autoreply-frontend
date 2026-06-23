@@ -27,7 +27,8 @@ import { AuthService } from '../../core/services/auth.service';
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Email</mat-label>
-            <input matInput formControlName="email" type="email" autocomplete="email" />
+            <input matInput formControlName="email" type="email" autocomplete="email"
+                   autocapitalize="none" autocorrect="off" spellcheck="false" />
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Password</mat-label>
@@ -69,6 +70,6 @@ export class Register {
     if (this.form.invalid) return;
     this.loading = true; this.error = '';
     const { email, password, name } = this.form.value;
-    this.auth.register(email!, password!, name!).subscribe({ error: (e) => { this.error = e.error?.message || 'Registration failed'; this.loading = false; } });
+    this.auth.register(email!.trim().toLowerCase(), password!, name!).subscribe({ error: (e) => { this.error = e.error?.message || 'Registration failed'; this.loading = false; } });
   }
 }

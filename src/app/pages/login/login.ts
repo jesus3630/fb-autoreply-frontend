@@ -23,7 +23,8 @@ import { AuthService } from '../../core/services/auth.service';
         <form [formGroup]="form" (ngSubmit)="submit()">
           <mat-form-field appearance="outline">
             <mat-label>Email</mat-label>
-            <input matInput formControlName="email" type="email" autocomplete="email" />
+            <input matInput formControlName="email" type="email" autocomplete="email"
+                   autocapitalize="none" autocorrect="off" spellcheck="false" />
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Password</mat-label>
@@ -65,6 +66,6 @@ export class Login {
     if (this.form.invalid) return;
     this.loading = true; this.error = '';
     const { email, password } = this.form.value;
-    this.auth.login(email!, password!).subscribe({ error: (e) => { this.error = e.error?.message || 'Login failed'; this.loading = false; } });
+    this.auth.login(email!.trim().toLowerCase(), password!).subscribe({ error: (e) => { this.error = e.error?.message || 'Login failed'; this.loading = false; } });
   }
 }
